@@ -1,0 +1,7 @@
+# dati raccolti: mai nel repo pubblico (stanno nel repo privato incipit-dati)
+dati/
+log/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store

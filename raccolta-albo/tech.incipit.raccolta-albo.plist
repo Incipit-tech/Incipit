@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>tech.incipit.raccolta-albo</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__ROOT__/.venv/bin/python</string>
+    <string>__ROOT__/raccolta.py</string>
+  </array>
+  <key>WorkingDirectory</key><string>__ROOT__</string>
+  <!-- ogni giorno alle 08:00 e alle 19:00; se il Mac dormiva, parte al risveglio -->
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>19</integer><key>Minute</key><integer>0</integer></dict>
+  </array>
+  <key>StandardOutPath</key><string>__ROOT__/log/launchd.out</string>
+  <key>StandardErrorPath</key><string>__ROOT__/log/launchd.err</string>
+</dict>
+</plist>

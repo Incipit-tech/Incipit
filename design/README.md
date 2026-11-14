@@ -2,7 +2,7 @@
 
 Asset del design system di Incipit (identità **Capolettera**) da usare nel codice.
 Il design system completo, con regole d'uso, anteprima, componenti React e PNG,
-è su Google Drive nella cartella *Desing System* dentro *startup*.
+è su Google Drive nella cartella *Design System* dentro *Incipit*.
 
 | File | Cosa contiene |
 |---|---|

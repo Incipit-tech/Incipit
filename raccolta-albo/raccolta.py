@@ -443,6 +443,8 @@ def main() -> int:
     # comuni diversi = server diversi: in parallelo non si carica nessuno di più
     with ThreadPoolExecutor(max_workers=len(comuni)) as pool:
         risultati = list(pool.map(un_comune, comuni))
+    # riporta tutto nel file principale: i -wal/-shm non vanno nel repo dati
+    sqlite3.connect(DB_PATH).execute("PRAGMA journal_mode=DELETE").close()
     return 0 if all(risultati) else 1
 
 

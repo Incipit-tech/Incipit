@@ -17,6 +17,13 @@ Per aggiungere un comune che usa la stessa piattaforma basta una riga in
 Comuni su altre piattaforme (Halley, Maggioli/Sicraweb, ecc.) avranno bisogno di un
 nuovo "lettore".
 
+## Script
+| File | Cosa fa |
+|---|---|
+| `raccolta.py` | atti **in pubblicazione**: metadati completi (anche l'ufficio proponente) e allegati |
+| `storico.py` | **storico atti**: solo l'elenco (registro, tipo, oggetto, date), ma per anni (dal 2019-2021) |
+| `analisi.py` | riepilogo per comune: volumi per anno, tipi, materie × procedure, uffici. Classificazione a regole, prima bozza |
+
 ## Dove gira
 La raccolta gira ogni giorno su **GitHub Actions**, nel repository privato
 `Incipit-tech/incipit-dati`, che contiene anche i dati. Non serve nessun computer acceso.

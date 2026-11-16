@@ -83,9 +83,11 @@ def analizza(con: sqlite3.Connection, slug: str, nome: str) -> str:
     righe = con.execute(
         """SELECT anno_registro, COALESCE(sottocategoria,''), COALESCE(oggetto,'') FROM storico WHERE comune=?
            UNION ALL
-           SELECT anno_registro, COALESCE(sottocategoria,''), COALESCE(oggetto,'') FROM atti WHERE comune=?
-             AND id NOT IN (SELECT id FROM storico WHERE comune=?)""",
-        (slug, slug, slug)).fetchall()
+           SELECT anno_registro, COALESCE(sottocategoria,''), COALESCE(oggetto,'') FROM atti a WHERE comune=?
+             -- lo stesso atto ha id diversi in albo e storico: si confronta il registro
+             AND NOT EXISTS (SELECT 1 FROM storico s WHERE s.comune=a.comune
+                             AND s.anno_registro=a.anno_registro AND s.numero_registro=a.numero_registro)""",
+        (slug, slug)).fetchall()
     if not righe:
         return f"# {nome}\n\nNessun dato.\n"
 

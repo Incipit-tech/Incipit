@@ -148,10 +148,12 @@ def css() -> str:
     tokens = re.sub(r'url\("fonts/([^"]+)"\)',
                     lambda m: f'url("data:font/woff2;base64,{b64(DESIGN / "fonts" / m.group(1))}")', tokens)
     return tokens + """
+:root { --barra: var(--blu-incipit); --barra-tenue: #B9C8FF; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --page:#0E1116; --surface:#181C23; --ink:#F3F4F6; --ink-muted:#9AA1AE; --link:#8DA6FF;
-  --line:#2A2F38; --blu-tenue:#1C2A5C; --barra:#6F8DFF; --barra-tenue:#33417A; } }
-:root { --barra: var(--blu-incipit); --barra-tenue: #B9C8FF; }
+  --line:#2A2F38; --blu-tenue:#1C2A5C; --barra:#6F8DFF; --barra-tenue:#33417A; color-scheme: dark; } }
+:root[data-theme="dark"] { --barra:#6F8DFF; --barra-tenue:#33417A; color-scheme: dark; }
+:root[data-theme="dark"] .logo .chiaro { display:none; } :root[data-theme="dark"] .logo .scuro { display:block; }
 * { box-sizing: border-box; }
 body { margin:0; background:var(--page); color:var(--ink); font-family:var(--font-sans);
        font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased; }
@@ -202,7 +204,8 @@ ol.opp b { display:block; }
 .passo { background: var(--blu-incipit); color: var(--on-blu); border-radius: var(--radius-md); padding: 20px 24px; margin: 20px 0 8px; }
 .passo h3 { margin:0 0 6px; font-size:18px; }
 footer { margin-top: 24px; font-size: 12px; color: var(--ink-muted); }
-@media (max-width: 720px) { .foglio { margin:0; border-radius:0; padding: 28px 16px; }
+@media (max-width: 720px) { .foglio { margin:0; border-radius:0; padding-block: 28px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
   header.testa { flex-direction: column; } .marchio { text-align:left; }
   .kpi, .due { grid-template-columns: 1fr; } h1 { font-size: 34px; } }
 @media print { body { background: white; } .foglio { box-shadow:none; margin:0; max-width:none; padding: 0; }
@@ -306,7 +309,7 @@ def pagina(d: dict) -> str:
 
     return f"""<!doctype html>
 <html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Analisi degli atti – {e(d["comune"])}</title>
+<title>Report atti {e(d["comune"].replace("Comune di ", ""))}</title>
 <style>{css()}</style></head>
 <body><main class="foglio">
 <header class="testa">
@@ -391,6 +394,7 @@ def main() -> int:
     p.add_argument("--comune", required=True)
     p.add_argument("--testi", type=Path, help="default: <dati>/report/testi-<comune>.json")
     p.add_argument("--uscita", type=Path, help="default: <dati>/report/<comune>.html")
+    p.add_argument("--artifact", action="store_true", help="senza involucro <html>, per pubblicarla come pagina su claude.ai")
     p.add_argument("--elenca-modelli", action="store_true", help="stampa le chiavi degli atti ripetuti (per curare le etichette)")
     args = p.parse_args()
     testi_path = args.testi or args.dati / "report" / f"testi-{args.comune}.json"
@@ -402,7 +406,11 @@ def main() -> int:
         return 0
     uscita = args.uscita or args.dati / "report" / f"{args.comune}.html"
     uscita.parent.mkdir(exist_ok=True)
-    uscita.write_text(pagina(d), encoding="utf-8")
+    testo = pagina(d)
+    if args.artifact:  # pagina per claude.ai: l'involucro <html>/<head>/<body> lo aggiunge la piattaforma
+        testo = re.sub(r"<!doctype html>\s*<html[^>]*><head>.*?(?=<title>)", "", testo, flags=re.S | re.I)
+        testo = re.sub(r"</head>\s*<body>|</body></html>", "", testo)
+    uscita.write_text(testo, encoding="utf-8")
     print(f"scritto {uscita} ({uscita.stat().st_size // 1024} KB)")
     return 0
 

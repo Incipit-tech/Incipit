@@ -23,6 +23,7 @@ nuovo "lettore".
 | `raccolta.py` | atti **in pubblicazione**: metadati completi (anche l'ufficio proponente) e allegati |
 | `storico.py` | **storico atti**: solo l'elenco (registro, tipo, oggetto, date), ma per anni (dal 2019-2021) |
 | `analisi.py` | riepilogo per comune: volumi per anno, tipi, materie × procedure, uffici. Classificazione a regole, prima bozza |
+| `classifica_ai.py` | classificazione materia × procedura con Claude Haiku (API Batch). Di default fa solo la stima dei costi; `--invia` è a pagamento. Dipendenza in `requirements-ai.txt` |
 
 ## Dove gira
 La raccolta gira ogni giorno su **GitHub Actions**, nel repository privato

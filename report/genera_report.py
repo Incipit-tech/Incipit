@@ -29,6 +29,11 @@ ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parent
 sys.path.insert(0, str(REPO / "raccolta-albo"))
 from analisi import ALTRO, classifica  # noqa: E402
+from uffici import addestra, valuta  # noqa: E402
+
+SOGLIA_UFFICIO = 0.8  # probabilità minima per usare l'ufficio stimato
+MIN_ACCURATEZZA = 0.75  # sotto, la sezione uffici torna al solo campione noto
+MIN_ATTI_UFFICIO = 5  # un ufficio conta in una pratica solo con almeno tanti atti
 
 DESIGN = REPO / "design"
 MESI = "gennaio febbraio marzo aprile maggio giugno luglio agosto settembre ottobre novembre dicembre".split()
@@ -85,7 +90,7 @@ def etichetta_da_oggetto(o: str, maxlen: int = 80) -> str:
     return o
 
 
-def calcola(con: sqlite3.Connection, slug: str, testi: dict) -> dict:
+def calcola(con: sqlite3.Connection, slug: str, testi: dict, uffici_stimati: bool = False) -> dict:
     atti = carica(con, slug)
     oggi = date.today()
     per_anno = Counter(a["anno"] for a in atti)
@@ -132,13 +137,37 @@ def calcola(con: sqlite3.Connection, slug: str, testi: dict) -> dict:
             per_pratica[(m, p)].add(u)
     condivise = sorted(((k, sorted(v)) for k, v in per_pratica.items() if len(v) > 1), key=lambda x: -len(x[1]))
 
+    # Ufficio stimato per tutto lo storico, solo se la stima si dimostra affidabile
+    # sugli atti dove l'ufficio è noto (leave-one-out, vedi uffici.py).
+    # Spenta di default (18/11): addestrata su poche settimane di atti, sullo storico di anni dava
+    # abbinamenti senza senso. Da riprovare quando gli atti con l'ufficio noto saranno molti di più.
+    stima = None
+    verifica = valuta(uff, SOGLIA_UFFICIO) if uffici_stimati else None
+    modello = addestra(uff) if uffici_stimati else None
+    if modello and verifica and verifica.coperti >= 20 and verifica.accuratezza >= MIN_ACCURATEZZA:
+        stimati, per_pratica_s = 0, defaultdict(Counter)
+        for a in atti:
+            m, p = classifica(a["oggetto"])
+            u, prob = modello.probabilita(a["oggetto"])[0]
+            if prob >= SOGLIA_UFFICIO:
+                stimati += 1
+                if ALTRO not in (m, p):
+                    per_pratica_s[(m, p)][u] += 1
+        righe = []
+        for k, cnt in per_pratica_s.items():
+            uffici_k = [(u, c) for u, c in cnt.most_common() if c >= MIN_ATTI_UFFICIO]
+            if len(uffici_k) > 1:
+                righe.append((k, uffici_k))
+        righe.sort(key=lambda x: (-len(x[1]), -sum(c for _, c in x[1])))
+        stima = {"stimati": stimati, "verifica": verifica, "condivise": righe}
+
     return {
         "comune": testi.get("nome", slug.title()), "totale": len(atti), "anni": anni, "per_anno": per_anno,
         "pieni": pieni, "media": media, "dal": min(a["data"] for a in atti if a["data"]),
         "al": max(a["data"] for a in atti if a["data"]), "tipi": tipi,
         "pratiche": pratiche, "pratiche_anno": pratiche_anno,
         "fotocopia": fotocopia, "candidati": candidati, "n_modelli": len(ripetuti), "quota_modelli": atti_in_modelli / len(atti),
-        "uffici_atti": len(uff), "uffici_n": len({u for u, _ in uff}), "condivise": condivise,
+        "uffici_atti": len(uff), "uffici_n": len({u for u, _ in uff}), "condivise": condivise, "stima": stima,
         "testi": testi,
     }
 
@@ -305,12 +334,32 @@ def pagina(d: dict) -> str:
             f'<tr><td>{e(f["etichetta"])}</td><td>{spark(f["per_anno"], anni, pieni)}</td>'
             f'<td class="n">{num(f["totale"])}</td><td class="n">circa {num(med)}</td></tr>')
 
-    condivise = "".join(
-        f'<tr><td><div class="materia">{e(m)}</div><div class="proc">{e(p)}</div></td>'
-        f'<td>{e(", ".join(u))}</td></tr>' for (m, p), u in d["condivise"][:4])
+    s = d["stima"]
+    if s:
+        v = s["verifica"]
+        condivise = "".join(
+            f'<tr><td><div class="materia">{e(m)}</div><div class="proc">{e(p)}</div></td>'
+            f'<td>{"<br>".join(f"{e(u)} <span class=\"nota\">{num(c)}</span>" for u, c in us[:4])}</td></tr>'
+            for (m, p), us in s["condivise"][:5])
+        intro_uffici = (
+            f"Il portale indica l'ufficio solo per gli atti in pubblicazione. Per lo storico lo abbiamo stimato "
+            f"dall'oggetto dell'atto: stima sicura per {num(s['stimati'])} atti su {num(d['totale'])}. "
+            f"Verificata sui {num(v.esempi)} atti con l'ufficio noto: giusta {100 * v.accuratezza:.0f} volte su 100.")
+        intestazione = "<th>Pratica</th><th>Uffici che la svolgono (atti stimati)</th>"
+    else:
+        condivise = "".join(
+            f'<tr><td><div class="materia">{e(m)}</div><div class="proc">{e(p)}</div></td>'
+            f'<td>{e(", ".join(u))}</td></tr>' for (m, p), u in d["condivise"][:4])
+        intro_uffici = (
+            f"Primo segnale, su {num(d['uffici_atti'])} atti recenti di {d['uffici_n']} uffici (l'ufficio è indicato "
+            f"solo per gli atti in pubblicazione; il campione cresce ogni giorno).")
+        intestazione = "<th>Pratica</th><th>Uffici che la svolgono</th>"
 
     opp = "".join(f'<li><div><b>{e(o["titolo"])}</b>{e(o["testo"])}</div></li>' for o in t.get("opportunita", []))
     bozza = '<span class="bozza">Bozza da validare con l\'esperta</span>' if t.get("opportunita_bozza", True) else ""
+    v = d.get("verifica")
+    nota_verifica = (f" (verificata su {v['n']} atti scelti a caso: materia giusta {100 * v['materia']:.0f} volte su 100)"
+                     if v else " (prima versione)")
     note = []
     if anni[0] not in pieni:
         note.append(f'{anni[0]}: dal {data_it(d["dal"])}, inizio dello storico online')
@@ -380,9 +429,8 @@ def pagina(d: dict) -> str:
 <section>
   <div class="numero">4 · Uffici che fanno cose simili</div>
   <h2>La stessa pratica, in uffici diversi</h2>
-  <p class="sotto">Primo segnale, su {num(d["uffici_atti"])} atti recenti di {d["uffici_n"]} uffici (l'ufficio è indicato solo per gli atti in pubblicazione;
-  il campione cresce ogni giorno).</p>
-  <table><thead><tr><th>Pratica</th><th>Uffici che la svolgono</th></tr></thead><tbody>{condivise}</tbody></table>
+  <p class="sotto">{e(intro_uffici)}</p>
+  <table><thead><tr>{intestazione}</tr></thead><tbody>{condivise}</tbody></table>
   <div class="messaggio"><b>Cosa significa.</b> Quando più uffici fanno la stessa pratica, chi la fa per la prima volta
   può partire dal lavoro già fatto da un collega, invece che da una pagina bianca.</div>
 </section>
@@ -400,7 +448,7 @@ def pagina(d: dict) -> str:
 
 <footer>
   <b>Fonte e metodo.</b> Albo pretorio e storico atti del comune, dati pubblici raccolti in automatico.
-  Classificazione automatica sull'oggetto degli atti (prima versione, a regole): i numeri sono indicativi.
+  Classificazione automatica sull'oggetto degli atti, a regole{nota_verifica}: i numeri sono indicativi.
   Nessun dato personale è usato o mostrato. Generato il {data_it(date.today().isoformat())} · Incipit
 </footer>
 </main></body></html>
@@ -413,12 +461,21 @@ def main() -> int:
     p.add_argument("--comune", required=True)
     p.add_argument("--testi", type=Path, help="default: <dati>/report/testi-<comune>.json")
     p.add_argument("--uscita", type=Path, help="default: <dati>/report/<comune>.html")
+    p.add_argument("--uffici-stimati", action="store_true", help="stima l'ufficio per lo storico (sperimentale)")
     p.add_argument("--artifact", action="store_true", help="senza involucro <html>, per pubblicarla come pagina su claude.ai")
     p.add_argument("--elenca-modelli", action="store_true", help="stampa le chiavi degli atti ripetuti (per curare le etichette)")
     args = p.parse_args()
     testi_path = args.testi or args.dati / "report" / f"testi-{args.comune}.json"
     testi = json.loads(testi_path.read_text(encoding="utf-8")) if testi_path.exists() else {}
-    d = calcola(sqlite3.connect(args.dati / "albo.sqlite"), args.comune, testi)
+    d = calcola(sqlite3.connect(args.dati / "albo.sqlite"), args.comune, testi, args.uffici_stimati)
+    # accuratezza delle regole su un campione verificato a mano, se c'è (verifica/<comune>-100-controllo.csv)
+    campione = args.dati / "verifica" / f"{args.comune}-100-controllo.csv"
+    d["verifica"] = None
+    if campione.exists():
+        import csv
+        from verifica import misura
+        with campione.open(encoding="utf-8") as f:
+            d["verifica"] = misura(list(csv.DictReader(f)))
     if args.elenca_modelli:
         # solo sul terminale di chi cura i testi: le proposte possono contenere nomi, vanno riscritte
         print("già nei testi:", ", ".join(f'{f["totale"]} {f["etichetta"]}' for f in d["fotocopia"]) or "nessuno")

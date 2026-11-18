@@ -32,35 +32,45 @@ ROOT = Path(__file__).resolve().parent
 #   PROCEDURA = che tipo di passaggio amministrativo è (affidamento, impegno...)
 # La coppia materia × procedura è la "pratica" che il report cerca di trovare ripetuta.
 # Vince la prima regola che corrisponde: le più specifiche stanno in alto.
+# Le regole sono misurate su un campione verificato a mano (verifica.py): ogni modifica
+# va rimisurata lì. Attenzione alle parole dentro altre parole: "sport" in "trasporto",
+# "mozione" in "promozionale", "accertamento" in "riaccertamento".
 MATERIE: list[tuple[str, str]] = [
     ("Manifestazioni di sorte / premi", r"concors\w* a premi|lotteri|estrazion\w* a sorte|tombol|manifestazion\w* (di|a) sorte"),
-    ("Cultura, biblioteca, eventi", r"bibliotec|cultur|museo|teatro|spettacol|mostra|rassegna|festival|manifestazion\w* (cultural|natal|estiv)|event[io]\b"),
-    ("Sport e tempo libero", r"sport|palestr|piscin|stadio|campo da|\ba\.?s\.?d\b"),
-    ("Scuola e servizi educativi", r"scuol|scolastic|refezion|mensa|nido|centri estivi|pre ?e post ?scuola|istruzion"),
-    ("Servizi sociali e casa", r"assistenz|disabil|anzian|minori\b|rsa\b|ricovero|servizi sociali|ambito territoriale|\bsap\b|abitativ|alloggi|famigli|sostegno al reddito|caregiver|fragilit|assistenti familiari|l\.? ?112/16|misura complementare"),
-    ("Personale", r"assunzion|concorso pubblic|selezion\w* pubblic|dipendent|personale|progression|mobilit\w* (volontaria|estern)|ferie|straordinari|retribuz"),
-    ("Strade, viabilità e traffico", r"viabilit|traffico|divieto di (sosta|transito)|circolazion|senso unico|strad|marciapied|asfalt|segnaletic|parchegg"),
-    ("Edifici e manutenzioni", r"manutenzion|immobil|edifici|riqualificazion|impiant|illuminazion|cimiter|verde pubblic|giardin"),
-    ("Edilizia e urbanistica", r"permesso di costruire|sanatoria|\bscia\b|piano (attuativo|di governo)|\bpgt\b|urbanistic|edilizi"),
-    ("Ambiente e rifiuti", r"rifiut|ambient|ecologic|igiene urbana|raccolta differenziata|inquinament"),
-    ("Polizia locale e sicurezza", r"polizia locale|sanzion|verbal\w* (di accertamento|codice)|videosorveglian|sicurezza urbana|protezione civile"),
+    ("Farmacie comunali", r"farmaci[ae]"),
+    ("Affari legali e contenzioso", r"incarico legale|costituzion\w* in giudizio|\bavvocat|contenzios|giudice di pace|\btribunale|\bricorso\b|decreto ingiuntiv"),
+    ("Servizi demografici ed elettorali", r"elettoral|\belezion|referendum|censimento|stato civile|\banagrafe (?!unica|per la stazione)|cittadinanza|leva militare"),
+    # "assunzione impegno di spesa" è contabilità, "manutenzione straordinaria" sono lavori: non personale
+    ("Personale", r"\bassunzion\w*\b(?!\s+(?:dell?'?\s*|di\s+)?(?:impegn|spes|accertament|obbligazion|onere|oneri))|concorso pubblic|selezion\w* pubblic|\bdipendent|personale\b|progression|mobilit\w* (volontaria|estern)|\bferie\b|(lavoro|ore|prestazion\w*) straordinari|retribuz|salario accessorio|indennit\w* contrattual|permessi sindacal|dimission|pensionament|aspettativa|comitato unico di garanzia|dotazione organica|micro-?organizzazion|somministrazione di lavoro|lavoro temporaneo|dispositivi di protezione individual|contributiv\w* inps|buoni pasto|\bart\.? ?(90|110)\b|area degli istruttori|formazione (del personale|degli operatori)"),
+    ("Bilancio e contabilità", r"bilancio|residui|rendiconto|\bpeg\b|piano della performance|\bdup\b|documento unico di programmazione|variazion\w* di cassa|esercizio finanziario|programma (biennale|triennale) degli acquisti|entrate vincolate|economato|contabilit|assistenza fiscale|tesoreria"),
+    ("Tributi ed entrate", r"\btari\b|tassa sui rifiuti|\bimu\b|\btribut|ruolo coattiv|riscossion|canone unico|entrat\w* tributari"),
+    ("Edilizia e urbanistica", r"permesso di costruire|sanatoria|\bscia\b|piano (attuativo|di governo)|\bpgt\b|urbanistic|\bedilizi|oneri di urbanizzazione|costo di costruzione|\bp\.?e\.?e\.?p\b|\bp\.?i\.?p\b"),
+    ("Polizia locale e sicurezza", r"polizia locale|sanzion|verbal\w* (di accertamento|codice)|videosorveglian|sicurezza urbana|protezione civile|infrazion|contingibile e urgente.{0,60}(tranquillit|sicurezza|quiete)"),
+    ("Strade, viabilità e traffico", r"viabilit|traffico|divieto (temporaneo )?di (sosta|transito|circolazione)|divieto di sosta|circolazion|senso unico|\bstrad|marciapied|asfalt|segnaletic|parchegg|\bstall[oi]\b|ciclopedonal|passerella|bituminos|trasporto pubblico locale(?! finalizzato)"),
+    ("Ambiente e rifiuti", r"rifiut|ambient|ecologic|igiene urbana|raccolta differenziata|inquinament|zanzar|insetti|impianti termici|impianto termico|rischio idraulico|\bcer\b|comunit\w* energetic"),
+    ("Edifici e manutenzioni", r"manutenzion|immobil|edifici|riqualificazion|impiant|illuminazion|cimiter|verde (pubblic|generale)|giardin|\blavori\b|risanament|adeguamento strutturale|bonifica|imbiancatur|perdita idrica|caldai|utenz|calore|gas naturale|energia elettrica|automezz|fotovoltaic|partenariato pubblico privato|vigili del fuoco"),
+    ("Cultura, biblioteca, eventi", r"bibliotec|cultur|museo|teatro|spettacol|mostra|rassegna|festival|manifestazion\w* (cultural|natal|estiv)|event[io]\b|anniversario|battaglia di magenta|giorno del ricordo|giorno della memoria|celebrazion|cerimoni|\bband[ae]\b|fanfara|opuscolo|\bfiera\b"),
+    ("Sport e tempo libero", r"\bsport(?!ell)|palestr|piscin|stadio|campo da|\ba\.?s\.?d\b"),
+    ("Scuola e servizi educativi", r"scuol|scolastic|refezion|mensa|nido|centri estivi|pre ?e post ?scuola|istruzion|\bdva\b|\bics\b|alunn"),
+    ("Servizi sociali e casa", r"assistenz\w* (domiciliar|social|economic|educativ)|teleassistenz|disabil|anzian|minor[ei]\b|\brsa\b|ricovero|servizi sociali|servizi alla persona|ambito (territoriale|del magentino)|\bsap\b|abitativ|alloggi|famigli|sostegno al reddito|caregiver|fragilit|assistenti familiari|l\.? ?112/16|misura complementare|maternit|care leavers|violenza di genere|stranieri|integrazione lavorativa|comunit\w* terapeutic|povert|accoglienza"),
     ("Commercio e attività produttive", r"commerci|\bduc\b|distretto urbano|attivit\w* produttiv|\bsuap\b|mercat|esercizi\w* pubblic|artigian"),
-    ("Tributi ed entrate", r"\btari\b|\bimu\b|\btribut|ruolo coattiv|riscossion|canone unico|entrat"),
-    ("Informatica e digitale", r"informatic|software|digital|hardware|licenz\w* d'uso|pagopa|\bpnrr\b.{0,40}(digital|cloud)|cloud"),
-    ("Organi istituzionali", r"consiglio comunale|regolament|statuto|mozion|interrogazion|commission\w* consiliar|surroga|giunta comunale.{0,20}(nomina|composizion)"),
+    ("Informatica e digitale", r"informatic|software|digital|hardware|licenz\w* d'uso|licenze|autocad|telefonia|connettivit|pagopa|\bpnrr\b.{0,40}(digital|cloud)|cloud"),
+    ("Organi istituzionali", r"consiglio comunale|consiliar|regolament|statuto|\bmozion|interrogazion|surroga|giunta comunale.{0,20}(nomina|composizion)|\brasa\b|stazione appaltante"),
 ]
 PROCEDURE: list[tuple[str, str]] = [
-    ("Patrocinio / contributo a terzi", r"patrocini|contribut|sussidi|buoni? (spesa|scuola)|bonus|erogazion"),
-    ("Affidamento diretto", r"affidament\w* dirett|art\.? ?50,? comma 1|ordine diretto|trattativa diretta"),
-    ("Gara / procedura negoziata", r"procedura (aperta|negoziata)|\bgara\b|aggiudicazion"),
-    ("Graduatoria / bando / avviso", r"graduatori|\bbando\b|avviso pubblic|manifestazion\w* di interesse"),
-    ("Convenzione / accordo", r"convenzion|protocollo d'intesa|accordo (di|tra)|co-?progettazion"),
-    ("Concessione / autorizzazione", r"concession|autorizzazion|occupazion\w* (di )?suolo|comodato|locazion|permesso"),
-    ("Nomina / incarico", r"nomin|incaric|designazion"),
-    ("Ordinanza", r"ordinanz|divieto|disciplina temporanea"),
-    ("Liquidazione / pagamento", r"liquidazion|rimbors|pagament"),
-    ("Impegno / accertamento di spesa", r"impegn|accertament|variazion\w* di bilancio|prelevament"),
-    ("Approvazione atti e progetti", r"approvazion|presa d'atto|adozion"),
+    # specifiche prima: "assunzione ... mediante graduatoria" è un'assunzione, non una graduatoria
+    ("Nomina / incarico", r"\bassunzion\w* a tempo|conferimento (dell')?incarico|incarico (legale|professionale|a tempo)|\bnomina\b"),
+    ("Liquidazione / pagamento", r"liquidazion|rimbors|pagament(?!o (retta|delle rette|di rette))|contributo associativo|intervento sostitutivo"),
+    ("Patrocinio / contributo a terzi", r"patrocini|\bcontribut[oi]\b|sussidi|buoni? (spesa|scuola)|bonus|erogazion|assegno di maternit|misure a sostegno"),
+    ("Gara / procedura negoziata", r"procedura (aperta|negoziata)|\bgara\b|aggiudicazion|partenariato pubblico privato|contratto per l.affidamento della gestione"),
+    ("Affidamento diretto", r"affidament\w* dirett|art\.? ?50,? comma 1|ordine diretto|trattativa diretta|determin\w* a contra(rre|ttare)|decisione a contrarre|\baffidamento (del|dell|di|della|alla|ai)\b|\bfornitura\b|adesione (alla )?campagna|campagna promozionale|adesione della farmacia|proroga (del )?servizio|\bacquisto\b|manutenzione automezz|somministrazione di lavoro"),
+    ("Graduatoria / bando / avviso", r"graduatori|\bbando\b|avviso pubblic|avviso di mobilit|mobilit\w* estern|manifestazion\w* di interesse|progressione tra le aree|procedura valutativa|selezione pubblic"),
+    ("Convenzione / accordo", r"convenzion(?!e consip)|protocollo d'intesa|accordo (di|tra)|co-?progettazion"),
+    ("Concessione / autorizzazione", r"concession|autorizzazion|occupazion\w* (di )?suolo|comodato|locazion|permesso|rateizzazion|aspettativa|subappalt|iscrizione\b.{0,40}registro"),
+    ("Ordinanza", r"ordinanz|divieto|disciplina temporanea|\bstall[oi]\b|esercizio degli impianti termici|prevenzione ed il controllo"),
+    ("Nomina / incarico", r"nomin|incaric|designazion|elezione dei componenti|componenti del comitato"),
+    ("Impegno / accertamento di spesa", r"impegn|\baccertament|prelevament"),
+    ("Approvazione atti e progetti", r"approvazion|presa d.atto|adozion|\bpiano\b|programma|bilancio|rendiconto|verifica|atto di indirizzo|schema|riaccertamento|variazion|costituzione (del fondo|in giudizio)|iscrizione|aggiornamento|esame progetto|provvediment|ricognizione|determinazione e ripartizione|organizzazione di una cerimonia"),
 ]
 _MAT = [(n, re.compile(rx, re.IGNORECASE)) for n, rx in MATERIE]
 _PRO = [(n, re.compile(rx, re.IGNORECASE)) for n, rx in PROCEDURE]

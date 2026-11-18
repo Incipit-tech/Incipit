@@ -60,8 +60,8 @@ def carica(con: sqlite3.Connection, slug: str) -> list[dict]:
                    FROM atti WHERE comune=:c)
            WHERE anno_registro IS NOT NULL AND numero_registro IS NOT NULL
            GROUP BY anno_registro, numero_registro""", {"c": slug}).fetchall()
-    return [{"anno": a, "tipo": (t or "").strip(), "oggetto": (o or "").strip(), "data": d or ""}
-            for a, _, t, o, d in righe]
+    return [{"anno": a, "numero": n, "tipo": (t or "").strip(), "oggetto": (o or "").strip(), "data": d or ""}
+            for a, n, t, o, d in righe]
 
 
 def chiave_modello(o: str) -> str:
@@ -90,7 +90,10 @@ def calcola(con: sqlite3.Connection, slug: str, testi: dict) -> dict:
     oggi = date.today()
     per_anno = Counter(a["anno"] for a in atti)
     anni = sorted(per_anno)
-    pieni = [a for a in anni if a < oggi.year]
+    # anno completo = già concluso e con il registro che parte dai primi numeri
+    # (lo storico di alcuni comuni comincia a metà anno: Cassano d'Adda da ottobre 2019)
+    primo_numero = {a: min(x["numero"] for x in atti if x["anno"] == a) for a in anni}
+    pieni = [a for a in anni if a < oggi.year and primo_numero[a] <= 10]
     media = sum(per_anno[a] for a in pieni) / len(pieni)
 
     tipi = Counter(a["tipo"] or "(senza tipo)" for a in atti)
@@ -112,9 +115,12 @@ def calcola(con: sqlite3.Connection, slug: str, testi: dict) -> dict:
     ripetuti = [(k, c) for k, c in modelli.most_common() if c >= MIN_RIPETIZIONI]
     etichette = testi.get("etichette", {})
     escludi = set(testi.get("escludi_modelli", []))
-    fotocopia = [{"etichetta": etichette.get(k) or etichetta_da_oggetto(min(esempi[k], key=len)),
-                  "totale": c, "per_anno": modelli_anno[k], "chiave": k}
-                 for k, c in ripetuti if k not in escludi]
+    # Privacy: nella pagina va solo un atto tipo con etichetta scritta a mano nei testi.
+    # Gli oggetti originali possono contenere nomi di persone (es. avvisi di deposito).
+    candidati = [{"etichetta": etichetta_da_oggetto(min(esempi[k], key=len)), "totale": c, "chiave": k}
+                 for k, c in ripetuti if k not in escludi and k not in etichette]
+    fotocopia = [{"etichetta": etichette[k], "totale": c, "per_anno": modelli_anno[k], "chiave": k}
+                 for k, c in ripetuti if k in etichette and k not in escludi]
     atti_in_modelli = sum(c for k, c in modelli.items() if c >= 10)
 
     uff = con.execute("SELECT proponente, oggetto FROM atti WHERE comune=? AND proponente IS NOT NULL",
@@ -131,7 +137,7 @@ def calcola(con: sqlite3.Connection, slug: str, testi: dict) -> dict:
         "pieni": pieni, "media": media, "dal": min(a["data"] for a in atti if a["data"]),
         "al": max(a["data"] for a in atti if a["data"]), "tipi": tipi,
         "pratiche": pratiche, "pratiche_anno": pratiche_anno,
-        "fotocopia": fotocopia, "n_modelli": len(ripetuti), "quota_modelli": atti_in_modelli / len(atti),
+        "fotocopia": fotocopia, "candidati": candidati, "n_modelli": len(ripetuti), "quota_modelli": atti_in_modelli / len(atti),
         "uffici_atti": len(uff), "uffici_n": len({u for u, _ in uff}), "condivise": condivise,
         "testi": testi,
     }
@@ -243,7 +249,7 @@ def grafico_tipi(d: dict) -> str:
     top = d["tipi"].most_common(5)
     altri = tot - sum(c for _, c in top)
     voci = [(TIPI_NOMI.get(t, t.capitalize()), c) for t, c in top] + ([("Altri tipi", altri)] if altri else [])
-    w, rh, lab = 360, 30, 150
+    w, rh, lab = 380, 30, 175
     mx = max(c for _, c in voci)
     out = [f'<svg viewBox="0 0 {w} {rh * len(voci)}" width="100%" role="img" aria-label="Atti per tipo">']
     for i, (nome, c) in enumerate(voci):
@@ -282,7 +288,7 @@ def pagina(d: dict) -> str:
     anni, pieni = d["anni"], d["pieni"]
     primo_pieno, ultimo_pieno = pieni[0], pieni[-1]
     crescita = 100 * (d["per_anno"][ultimo_pieno] / d["per_anno"][primo_pieno] - 1)
-    det = d["tipi"].get("DETERMINAZIONE", 0) / d["totale"]
+    det = sum(c for t, c in d["tipi"].items() if "DETERMIN" in t) / d["totale"]  # i nomi dei tipi variano per comune
 
     righe_pratiche = []
     for (m, p), c in d["pratiche"].most_common(8):
@@ -305,7 +311,20 @@ def pagina(d: dict) -> str:
 
     opp = "".join(f'<li><div><b>{e(o["titolo"])}</b>{e(o["testo"])}</div></li>' for o in t.get("opportunita", []))
     bozza = '<span class="bozza">Bozza da validare con l\'esperta</span>' if t.get("opportunita_bozza", True) else ""
-    asterisco = (f'* {anni[-1]}: atti fino al {data_it(d["al"])}.' if anni[-1] not in pieni else "")
+    note = []
+    if anni[0] not in pieni:
+        note.append(f'{anni[0]}: dal {data_it(d["dal"])}, inizio dello storico online')
+    if anni[-1] not in pieni:
+        note.append(f'{anni[-1]}: fino al {data_it(d["al"])}')
+    asterisco = ("* " + "; ".join(note) + ".") if note else ""
+    if crescita >= 5:
+        tendenza, frase_tendenza = ", in crescita", f"gli atti sono aumentati del {crescita:.0f}%"
+    elif crescita <= -5:
+        tendenza, frase_tendenza = ", in calo", f"gli atti sono diminuiti del {-crescita:.0f}%"
+    else:
+        tendenza, frase_tendenza = ", stabili", "il numero di atti è rimasto stabile"
+    quota_det = (f"Tre su quattro sono determinazioni dirigenziali." if 0.7 <= det < 0.8 else
+                 f"Il {100 * det:.0f}% sono determinazioni dirigenziali.")
 
     return f"""<!doctype html>
 <html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -329,8 +348,8 @@ def pagina(d: dict) -> str:
 
 <section>
   <div class="numero">1 · Quanto produce il comune</div>
-  <h2>Circa {num(d["media"])} atti l'anno, in crescita</h2>
-  <p class="sotto">Dal {primo_pieno} al {ultimo_pieno} gli atti sono aumentati del {crescita:.0f}%. Tre su quattro sono determinazioni dirigenziali.</p>
+  <h2>Circa {num(d["media"])} atti l'anno{tendenza}</h2>
+  <p class="sotto">Dal {primo_pieno} al {ultimo_pieno} {frase_tendenza}. {quota_det}</p>
   <div class="due">
     <figure><figcaption>Atti pubblicati per anno</figcaption>{grafico_anni(d)}<div class="nota">{e(asterisco)}</div></figure>
     <figure><figcaption>Per tipo di atto, {anni[0]}–{anni[-1]}</figcaption>{grafico_tipi(d)}</figure>
@@ -401,7 +420,9 @@ def main() -> int:
     testi = json.loads(testi_path.read_text(encoding="utf-8")) if testi_path.exists() else {}
     d = calcola(sqlite3.connect(args.dati / "albo.sqlite"), args.comune, testi)
     if args.elenca_modelli:
-        for f in d["fotocopia"][:15]:
+        # solo sul terminale di chi cura i testi: le proposte possono contenere nomi, vanno riscritte
+        print("già nei testi:", ", ".join(f'{f["totale"]} {f["etichetta"]}' for f in d["fotocopia"]) or "nessuno")
+        for f in d["candidati"][:20]:
             print(f'{f["totale"]:4d}  {f["chiave"]!r}  →  {f["etichetta"]}')
         return 0
     uscita = args.uscita or args.dati / "report" / f"{args.comune}.html"
